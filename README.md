@@ -1,2 +1,173 @@
-# Quantized-Game-Dialogue-Simulator
-A Quantized Game Dialogue Simulator built using a small GPT model trained on game dialogue data. Implements dynamic and static post-training quantization to reduce model size and compares inference speed and memory usage.
+QUANTIZED GAME DIALOGUE SIMULATOR
+=================================
+ 
+A small educational project that trains a character-level GPT model on a
+hand-written set of fantasy RPG dialogue, then compresses it with PyTorch
+quantization and compares the original and quantized versions on model size
+and CPU inference speed.
+ 
+The goal is to show the full workflow end to end: build a GPT from scratch,
+train it, generate text, quantize it, and measure the trade-offs.
+ 
+ 
+OVERVIEW
+--------
+Game NPCs often need dialogue generation that runs on small devices (phones,
+consoles, handheld hardware). Large language models are too heavy for that,
+so this project asks: how much can quantization shrink a tiny GPT, and what
+does that do to speed?
+ 
+The notebook walks through these steps:
+ 
+  1. Create a small game-dialogue dataset (Player, Wizard, Knight, Villager,
+     Dragon).
+  2. Build a character-level vocabulary and encode the text.
+  3. Implement a decoder-only GPT (self-attention, multi-head attention,
+     feed-forward blocks, layer norm).
+  4. Train the model on CPU or GPU.
+  5. Generate new dialogue from the trained model.
+  6. Apply dynamic and static post-training quantization.
+  7. Compare file size and inference time across all three models.
+ 
+ 
+FEATURES
+--------
+  - GPT implemented from scratch in PyTorch (about 109K parameters)
+  - Character-level tokenizer, no external tokenizer needed
+  - Causal self-attention with multiple heads
+  - Training loop with AdamW and loss logging
+  - Text generation with multinomial sampling
+  - Dynamic and static (calibrated) quantization
+  - Size comparison table and bar chart
+  - Repeatable inference benchmark with warm-up runs
+ 
+ 
+DATASET
+-------
+A short script of about 1,375 characters, written inside the notebook and
+saved to dataset/game_dialogue.txt. It contains quest-style conversations
+between:
+ 
+  Player    - asks questions, fights the dragon
+  Wizard    - gives guidance and hints
+  Knight    - guards the castle
+  Villager  - gives directions and reacts to events
+  Dragon    - the antagonist
+ 
+  Vocabulary size : 43 characters
+  Split           : 90% training (1,237 chars) / 10% validation (138 chars)
+ 
+ 
+MODEL ARCHITECTURE
+------------------
+  Embedding size (n_embd)       : 64
+  Attention heads (n_head)      : 4
+  Transformer layers (n_layer)  : 2
+  Context length (block_size)   : 64
+  Batch size                    : 16
+  Dropout                       : 0.1
+  Learning rate                 : 0.001 (AdamW)
+  Training steps                : 1,000
+  Parameters                    : about 109,355
+ 
+Each transformer block uses pre-layer-norm, multi-head causal self-attention
+and a 4x-wide ReLU feed-forward network, both with residual connections.
+ 
+ 
+QUANTIZATION
+------------
+Two post-training techniques are compared against the original float32 model:
+ 
+  Dynamic quantization
+    Weights of linear layers are stored as int8, and activations are
+    quantized on the fly at inference time. No calibration data is needed.
+ 
+  Static quantization
+    Linear layers are wrapped with QuantStub / DeQuantStub, observers are
+    calibrated on samples of the training data, and the model is converted
+    to int8. Embeddings and LayerNorm stay in floating point.
+ 
+The static pipeline uses the x86 backend when available and falls back to
+fbgemm.
+ 
+ 
+RESULTS
+-------
+Measured on CPU (values vary slightly between runs and machines).
+ 
+Model size
+  Original GPT (float32)   576.18 KB
+  Dynamic quantized GPT    304.67 KB   (about 47% smaller)
+  Static quantized GPT     365.67 KB   (about 37% smaller)
+ 
+Average inference time (input 1 x 32 tokens, 200 runs x 5 repeats, after
+warm-up)
+  Original GPT             1.97 ms
+  Dynamic quantized GPT    4.58 ms
+  Static quantized GPT     4.33 ms
+ 
+Key takeaway: quantization clearly reduces storage size, but for a model this
+small the int8 versions were slower than float32 on CPU. At only about 109K
+parameters, the overhead of quantizing and dequantizing activations outweighs
+the savings from smaller matrix multiplications. Speed-ups typically appear
+with larger models and hardware with fast int8 support.
+ 
+ 
+GETTING STARTED
+---------------
+Requirements:
+  - Python 3.9+
+  - torch, numpy, matplotlib, pandas
+ 
+Install:
+  pip install torch numpy matplotlib pandas
+ 
+Run:
+  1. Open Quantized_Game_Dialogue_Simulator.ipynb in Jupyter or Google Colab.
+  2. Run the cells from top to bottom. A GPU is not required.
+  3. Training 1,000 steps on CPU takes about a minute.
+ 
+Files produced by the notebook:
+  dataset/game_dialogue.txt           training text
+  game_gpt_model.pth                  original weights
+  game_gpt_dynamic_quantized.pth      dynamic int8 weights
+  game_gpt_static_quantized.pth       static int8 weights
+ 
+ 
+PROJECT STRUCTURE
+-----------------
+  Quantized_Game_Dialogue_Simulator.ipynb   full pipeline
+  dataset/game_dialogue.txt                 generated by the notebook
+  game_gpt_model.pth                        trained float32 model
+  game_gpt_dynamic_quantized.pth            dynamic quantized model
+  game_gpt_static_quantized.pth             static quantized model
+  README.txt                                this file
+ 
+ 
+LIMITATIONS
+-----------
+  - Tiny dataset: with only about 1.4K characters, the model mostly memorizes
+    the text. Generated dialogue is noisy and often has broken words.
+  - Character-level modelling: the model learns spelling patterns, not real
+    conversation logic.
+  - No quality metric after quantization: the comparison covers size and
+    speed only, not output quality or validation loss.
+  - torch.ao.quantization is deprecated in recent PyTorch releases; moving to
+    torchao is recommended for future work.
+ 
+ 
+FUTURE IMPROVEMENTS
+-------------------
+  - Train on a much larger dialogue corpus or use a subword tokenizer (BPE)
+  - Report validation loss and perplexity for each quantized model
+  - Try quantization-aware training (QAT)
+  - Benchmark on a larger model or on mobile/edge hardware
+  - Add a simple interactive NPC chat loop
+  - Migrate to the torchao quantization API
+ 
+ 
+LICENSE
+-------
+Educational project. Add a license of your choice (for example MIT) before
+publishing.
+ 
